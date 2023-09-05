@@ -1,3 +1,7 @@
+# This Repository is not for Production Use!
+
+Please use https://github.com/internetlehrer/deploy instead.
+
 # Learning Locker Open Source installer
 
 This is the HT2 Labs Learning Locker Open Source installer. It's designed to walk you through the process of downloading the code, running any steps needed (such as compilation) and generally setting up a complete working instance.
@@ -12,16 +16,15 @@ To install or update Learning Locker, run the install script via one of the comm
 
 **Install with cURL**
 ```sh
-curl -o- -L https://raw.githubusercontent.com/LearningLocker/deploy/master/deployll.sh > deployll.sh && bash deployll.sh
+curl -o- -L https://raw.githubusercontent.com/Uwe-Kohnle/deploy/master/deployll.sh > deployll.sh && bash deployll.sh
 ```
 **Install with Wget**:
 ```sh
-wget -qO deployll.sh https://raw.githubusercontent.com/LearningLocker/deploy/master/deployll.sh && bash deployll.sh
+wget -qO deployll.sh https://raw.githubusercontent.com/Uwe-Kohnle/deploy/master/deployll.sh && bash deployll.sh
 ```
 
 ### Fully Supported Operating Systems
-	Ubuntu 16
-	Ubuntu 18 [RECOMMENDED]
+	Ubuntu 20 [RECOMMENDED]
 The install script may work on other systems, but this is not guaranteed
 
 ### Recommended Hardware
