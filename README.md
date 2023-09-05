@@ -2,6 +2,21 @@
 
 Please use https://github.com/internetlehrer/deploy instead.
 
+# Modified Installer for Ubuntu 20.04
+
+Support for Ubuntu 22.04 is coming soon.
+
+**After Installation the following steps are necessary:**
+```sh
+sudo sed -i "s|mongodb://localhost:27017/learninglocker_v2?replicaSet=rs0|mongodb://localhost:27017/learninglocker_v2|g" /usr/local/learninglocker/current/xapi/.env
+
+sudo -u learninglocker pm2 kill
+
+sudo service pm2-learninglocker restart
+
+systemctl status pm2-learninglocker.service
+```
+
 # Learning Locker Open Source installer
 
 This is the HT2 Labs Learning Locker Open Source installer. It's designed to walk you through the process of downloading the code, running any steps needed (such as compilation) and generally setting up a complete working instance.
