@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2017-2019 HT2 Labs
+# Copyright (C) 2017-2019 HT2 Labs, modifications 2025 by internetlehrer GmbH
 #
 # This program is free software: you can redistribute it and/or modify it under the terms of the
 # GNU General Public License as published by the Free Software Foundation, either version 3 of
@@ -74,19 +74,19 @@ function determine_os_version ()
         OS_VERSION="Redhat"
         OS_SUBVER="Amazon"
         OS_ARCH=$(uname -a | awk '{print $12}')
-        output_log "Detected OS: ${OS_VERSION}, subver:${OS_SUBVER}, arch:${OS_ARCH}, vno:${OS_VNO}, NodeOverride: ${NODE_OVERRIDE}, PM2Override:${PM2_OVERRIDE}"
+        output "Sorry, we don't support ${OS_VERSION}, subversion: ${OS_SUBVER} at the moment."
+        echo
+        exit 0
     elif [[ $RAW_OS_VERSION == *"Debian"* ]]; then
         OS_VERSION="Debian"
-        output_log "Detected OS: ${OS_VERSION}, subver:${OS_SUBVER}, arch:${OS_ARCH}, vno:${OS_VNO}, NodeOverride: ${NODE_OVERRIDE}, PM2Override:${PM2_OVERRIDE}"
+        output "Sorry, we don't support ${OS_VERSION} at the moment."
+        echo
+        exit 0
     elif [[ $RAW_OS_VERSION == *"Ubuntu"* ]]; then
         OS_VERSION="Ubuntu"
         OS_VNO=`lsb_release -a 2>/dev/null | grep Release | awk '{print $2}'`
         if [[ $OS_VNO == "" ]]; then
             OS_VNO=$(cat /etc/os-release | grep "VERSION_ID" | sed 's?VERSION_ID=??' | sed 's?"??g')
-        fi
-        if [[ $OS_VNO == "14.04" ]]; then
-            NODE_OVERRIDE="6.x"
-            PM2_OVERRIDE="ubuntu14"
         fi
         output_log "Detected OS: ${OS_VERSION}, subver:${OS_SUBVER}, arch:${OS_ARCH}, vno:${OS_VNO}, NodeOverride: ${NODE_OVERRIDE}, PM2Override:${PM2_OVERRIDE}"
     elif [[ -f $REDHAT_FILE ]]; then
@@ -94,45 +94,30 @@ function determine_os_version ()
         OS_ARCH=$(uname -a | awk '{print $12}')
         # centos detection
         if [[ $RAW_OS_VERSION == *"CentOS"* ]]; then
-            OS_VNO=$(cat $CENTOS_FILE | awk '{print $4}' | tr "." " " | awk '{print $1}')
-            if [[ OS_VNO < 6 ]]; then
-                echo "[LL] Versions of CentOS prior to CentOS 6 aren't supported"
-                exit 0
-            fi
             OS_VERSION="Redhat"
             OS_SUBVER="CentOS"
-            output_log "Detected OS: ${OS_VERSION}, subver:${OS_SUBVER}, arch:${OS_ARCH}, vno:${OS_VNO}, NodeOverride: ${NODE_OVERRIDE}, PM2Override:${PM2_OVERRIDE}"
+            output "Sorry, we don't support ${OS_VERSION}, subversion: ${OS_SUBVER} at the moment."
+            echo
+            exit 0
         # RHEL
         elif [[ $RAW_OS_VERSION == *"Red Hat Enterprise Linux"* ]]; then
             OS_VERSION="Redhat"
             OS_SUBVER="RHEL"
-            OS_VNO=$(cat $REDHAT_FILE | awk '{print $7}')
-            output_log "Detected OS: ${OS_VERSION}, subver:${OS_SUBVER}, arch:${OS_ARCH}, vno:${OS_VNO}, NodeOverride: ${NODE_OVERRIDE}, PM2Override:${PM2_OVERRIDE}"
+            output "Sorry, we don't support ${OS_VERSION}, subversion: ${OS_SUBVER} at the moment."
             echo
-            output "Sorry, we don't support RHEL at the moment - press 'e' to exit or any other key to continue"
-            read -r -s -n 1 n
-            output_log "user entered ${n}"
-            if [[ $n == "e" ]]; then
-                exit 0
-            fi
-            echo
+            exit 0
 
         # Fedora
         elif [[ $RAW_OS_VERSION == *"Fedora"* ]]; then
             OS_VERSION="Redhat"
             OS_SUBVER="Fedora"
-            OS_VNO=$(cat $REDHAT_FILE | awk '{print $3}')
-            output_log "Detected OS: ${OS_VERSION}, subver:${OS_SUBVER}, arch:${OS_ARCH}, vno:${OS_VNO}, NodeOverride: ${NODE_OVERRIDE}, PM2Override:${PM2_OVERRIDE}"
-            if [[ OS_VNO < 24 ]]; then
-                echo
-                output "Sorry, we don't support this version of Fedora at the moment"
-                echo
-                exit 0
-            fi
+            output "Sorry, we don't support ${OS_VERSION}, subversion: ${OS_SUBVER} at the moment."
+            echo
+            exit 0
 
         # unknown redhat - bail
         else
-            output "Only set up for debian/ubuntu/centos at the moment I'm afraid - exiting"
+            output "Only set up for debian/ubuntu at the moment I'm afraid - exiting"
             exit 0
         fi
     fi
@@ -140,7 +125,7 @@ function determine_os_version ()
     if [[ $OS_VERSION != "Ubuntu" ]]; then
         printf "||---------------------------------------------------------------||\n"
         printf "||  -----------------------------------------------------------  ||\n"
-        printf "||     NOTE: THIS SCRIPT ONLY FULLY SUPPORTS UBUNTU 16 & 18      ||\n"
+        printf "||     NOTE: THIS SCRIPT ONLY FULLY SUPPORTS UBUNTU 24.04        ||\n"
         printf "||   it may work on other systems, but this is not guaranteed    ||\n"
         printf "||                                                               ||\n"
         printf "||          Press any key to acknowledge this message.           ||\n"
@@ -321,28 +306,27 @@ function setup_init_script ()
     # an absolute path before running the command. It also needs to go into a variable and be run rather than
     # be run within backticks or the path still isn't substituted correctly. I know, right? it's a pain.
     output "setting up PM2 startup"
+    
+    #Begin fix mongo
+    echo "start fix mongodb removing ?replicaSet=rs0"
+    sed -i "s|mongodb://127.0.0.1:27017/learninglocker_v2?replicaSet=rs0|mongodb://127.0.0.1:27017/learninglocker_v2|g" /usr/local/$2/current/xapi/.env
+    sed -i "s|mongodb://localhost:27017/learninglocker_v2?replicaSet=rs0|mongodb://127.0.0.1:27017/learninglocker_v2|g" /usr/local/$2/current/xapi/.env
+    sudo -u $2 pm2 kill
+
+    
     if [[ $PM2_OVERRIDE != false ]]; then
         output "using PM2 startup override of $PM2_OVERRIDE"
         PM2_STARTUP=$(su - $2 -c "pm2 startup $PM2_OVERRIDE | grep sudo | sed 's?sudo ??' | sed 's?\$PATH?$PATH?'")
     else
         PM2_STARTUP=$(su - $2 -c "pm2 startup | grep sudo | sed 's?sudo ??' | sed 's?\$PATH?$PATH?'")
     fi
+    echo $PM2_STARTUP
     CHK=$($PM2_STARTUP)
 
-    if [[ $OS_SUBVER == "fedora" ]]; then
-        output_log "fedora detected, SELinux may get in the way"
-        echo "=========================="
-        echo "|         NOTICE         |"
-        echo "=========================="
-        echo "As you're on fedora, you may need to either turn off SELinux (not recommended) or add a rule to allow"
-        echo "access to the PIDFile in /etc/systemd/system/pm2-${2}.service or the startup script will fail to run"
-        echo
-        echo "In addition, you'll need to punch a hole in your firewalld config or disable the firewall with:"
-        echo "  service stop firewalld"
-        echo
-        echo
-        sleep 5
-    fi
+  
+    service pm2-$2 restart >> $OUTPUT_LOG
+    systemctl status pm2-$2.service >> $OUTPUT_LOG
+
 }
 
 
@@ -447,6 +431,7 @@ function base_install ()
             fi
             # clone repo
             git clone -q -b ${GIT_BRANCH} $MAIN_REPO ${WEBAPP_SUBDIR}
+            # nano ${WEBAPP_SUBDIR}/package.json
             # clear the history in case we passed in the user/pass
             if [[ $GIT_USER != false ]]; then
                 history -c
@@ -469,8 +454,9 @@ function base_install ()
         sed -i "s?APP_SECRET=?APP_SECRET=${APP_SECRET}?" .env
     fi
 
-    output "checking UnicodeData is present..." true
-    unicode_definition_install $PWD/UnicodeData.txt
+    #outdated; file does not exist anymore
+    #output "checking UnicodeData is present..." true
+    #unicode_definition_install $PWD/UnicodeData.txt
     output "done!" false true
 
     # yarn install
@@ -535,7 +521,7 @@ function xapi_install ()
         # TODO - make this do a max itteration of say 3 attempts to clone
         while true; do
             output_log "attempting git clone for xapi, branch: $XAPI_BRANCH"
-            git clone -q -b ${XAPI_BRANCH} https://github.com/LearningLocker/xapi-service.git ${XAPI_SUBDIR}
+            git clone -q -b ${XAPI_BRANCH} https://github.com/internetlehrer/ll-xapi-service.git ${XAPI_SUBDIR}
             if [[ ! -d ${XAPI_SUBDIR} ]]; then
                 output_log "git clone appears to have failed"
                 break
@@ -662,6 +648,8 @@ function setup_nginx_config ()
     sed -i "s/:API_PORT/:${API_PORT}/" $1
     sed -i "s/XAPI_PORT/${XAPI_PORT}/" $1
     sed -i "s?/SITE_ROOT?${4}?" $1
+    
+    sed -i "s/listen/#listen/g" /etc/nginx/sites-enabled/default
 }
 
 # $1 is the path to the nginx config file
@@ -706,13 +694,8 @@ function debian_install ()
     # we run an apt-get update here in case the distro is out of date
     if [[ ! `command -v python` ]] || [[ ! `command -v curl` ]] || [[ ! `command -v wget` ]] || [[ ! `command -v git` ]] || [[ ! `command -v gcc` ]] || [[ ! `command -v g++` ]]; then
         apt-get update >> $OUTPUT_LOG 2>>$ERROR_LOG
-        if [[ $OS_VNO == "18.04" ]]; then
-            update-ca-certificates >> $OUTPUT_LOG 2>>$ERROR_LOG
-            apt-get -y -qq install net-tools curl wget git python build-essential apt-transport-https >> $OUTPUT_LOG 2>>$ERROR_LOG
-        else
-            update-ca-certificates >> $OUTPUT_LOG 2>>$ERROR_LOG
-            apt-get -y -qq install net-tools curl wget git python build-essential xvfb apt-transport-https >> $OUTPUT_LOG 2>>$ERROR_LOG
-        fi
+        update-ca-certificates >> $OUTPUT_LOG 2>>$ERROR_LOG
+        apt-get -y -qq install net-tools curl wget git python3 build-essential xvfb apt-transport-https apt-utils >> $OUTPUT_LOG 2>>$ERROR_LOG
     fi
 
     if [[ ! `command -v pwgen ` ]]; then
@@ -744,8 +727,9 @@ function debian_install ()
     fi
 
     if [[ $INSTALL_NODE == true ]]; then
-        curl -sL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - >> $OUTPUT_LOG 2>>$ERROR_LOG
+        #curl -sL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - >> $OUTPUT_LOG 2>>$ERROR_LOG
         apt-get -y -qq install nodejs >> $OUTPUT_LOG 2>>$ERROR_LOG
+        apt-get -y -qq install npm >> $OUTPUT_LOG 2>>$ERROR_LOG
     else
         output "Node.js already installed"
     fi
@@ -765,10 +749,12 @@ function debian_install ()
     output "node version - $INSTALLED_NODE_VERSION"
 
     if [[ ! `command -v yarn` ]]; then
-        curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - >> $OUTPUT_LOG 2>>$ERROR_LOG
-        echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
-        apt-get -qq update >> $OUTPUT_LOG 2>>$ERROR_LOG
-        apt-get -y -qq install yarn >> $OUTPUT_LOG 2>>$ERROR_LOG
+#        curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnpkg-archive-keyring.gpg > /dev/null
+#        echo "deb [signed-by=/usr/share/keyrings/yarnpkg-archive-keyring.gpg] https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+#        apt-get -qq update >> $OUTPUT_LOG 2>>$ERROR_LOG
+#        apt-get -y -qq install yarn >> $OUTPUT_LOG 2>>$ERROR_LOG
+        npm install --global yarn
+        yarn --version >> $OUTPUT_LOG 2>>$ERROR_LOG
     else
         output "yarn already installed"
     fi
@@ -805,12 +791,8 @@ function debian_nginx ()
     done
 
     output "installing nginx..."
-    output "Setting up nginx repo (Stock Ubuntu version is too old)"
-    cd /tmp/ && wget http://nginx.org/keys/nginx_signing.key >> $OUTPUT_LOG 2>>$ERROR_LOG && cd - >> $OUTPUT_LOG 2>>$ERROR_LOG
-    apt-key add /tmp/nginx_signing.key >> $OUTPUT_LOG 2>>$ERROR_LOG
-    echo "deb https://nginx.org/packages/ubuntu/ $(lsb_release -cs) nginx" | tee /etc/apt/sources.list.d/Nginx.list >> $OUTPUT_LOG 2>>$ERROR_LOG
-    apt update >> $OUTPUT_LOG 2>>$ERROR_LOG
-    apt -qq -y install nginx >> $OUTPUT_LOG 2>>$ERROR_LOG
+    apt-get update >> $OUTPUT_LOG 2>>$ERROR_LOG
+    apt-get -qq -y install nginx >> $OUTPUT_LOG 2>>$ERROR_LOG
     print_spinner true
 
     if [[ ! -f ${1}/nginx.conf.example ]]; then
@@ -850,27 +832,29 @@ function debian_mongo ()
 {
     D_M_I=false
     if [[ $OS_VERSION == "Ubuntu" ]]; then
-            output "Setting up mongo repo (Stock Ubuntu version is too old)"
-            apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 9DA31620334BD75D9DCB49F368818C72E52529D4 >> $OUTPUT_LOG 2>>$ERROR_LOG
-            if [[ $OS_VNO == "16.04" ]]; then
-                echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/4.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-4.0.list
-            fi
-            if [[ $OS_VNO == "18.04" ]]; then
-                echo "deb [ arch=amd64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/4.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-4.0.list
-            fi
-            if [[ $OS_VNO == "20.04" ]]; then
-                curl -fsSL https://www.mongodb.org/static/pgp/server-4.4.asc | apt-key add -
-                echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/4.4 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-4.4.list
-            fi
-            apt-get update >> $OUTPUT_LOG 2>>$ERROR_LOG
-            systemctl unmask mongod
-            apt-get -qq -y install mongodb-org >> $OUTPUT_LOG 2>>$ERROR_LOG
-            # Attempt to start via both services - one will likely fail but
-            output "Attempting to start mongod service...."
-            output "If this fails you will need to check how the Mongo service is setup for your system and manually start it"
-            service mongod start
-            systemctl enable mongod.service
-            D_M_I=true
+    
+        output "Setting up mongo repo for: ${OS_VNO}"
+        #apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 9DA31620334BD75D9DCB49F368818C72E52529D4 >> $OUTPUT_LOG 2>>$ERROR_LOG
+        #curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
+        #echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+        curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
+        if [[ $OS_VNO == "22.04" ]]; then
+            echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/8.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+        fi
+        if [[ $OS_VNO == "24.04" ]]; then
+            echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+        fi
+        apt-get update >> $OUTPUT_LOG 2>>$ERROR_LOG
+        systemctl unmask mongod
+        apt-get -qq -y install mongodb-org >> $OUTPUT_LOG 2>>$ERROR_LOG &
+        print_spinner true
+        # Attempt to start via both services - one will likely fail but
+        output "Attempting to start mongod service...."
+        output "If this fails you will need to check how the Mongo service is setup for your system and manually start it"
+        #systemctl enable mongod.service
+        systemctl start mongod
+        systemctl enable mongod
+        D_M_I=true
     fi
 
     if [[ $D_M_I == false ]]; then
@@ -885,19 +869,15 @@ function debian_redis ()
 {
     output "installing redis..."
     redisInstallOldPath=$(pwd)
-    cd /tmp
-    curl -sO http://download.redis.io/redis-stable.tar.gz
-    tar xzvf redis-stable.tar.gz >> $OUTPUT_LOG 2>>$ERROR_LOG
-    cd redis-stable
-    make >> $OUTPUT_LOG 2>>$ERROR_LOG && make install >> $OUTPUT_LOG 2>>$ERROR_LOG
-    mkdir /etc/redis
-    cp redis.conf /etc/redis
+    apt-get update >> $OUTPUT_LOG 2>>$ERROR_LOG
+    apt-get install -y -qq redis-server >> $OUTPUT_LOG 2>>$ERROR_LOG
     sed -i "s/^supervised .*/supervised systemd/" /etc/redis/redis.conf
     sed -i "s/^dir .*/dir \/var\/lib\/redis/" /etc/redis/redis.conf | grep '^dir'
     redisServiceFile="/etc/systemd/system/redis.service"
-    printf "[Unit]\n" >> $redisServiceFile && printf "Description=Redis In-Memory Data Store\n" >> $redisServiceFile && printf "After=network.target\n\n" >> $redisServiceFile && printf "[Service]\n" >> $redisServiceFile && printf "User=redis\n" >> $redisServiceFile && printf "Group=redis\n" >> $redisServiceFile && printf "ExecStart=/usr/local/bin/redis-server /etc/redis/redis.conf\n" >> $redisServiceFile && printf "ExecStop=/usr/local/bin/redis-cli shutdown\n" >> $redisServiceFile && printf "Restart=always\n\n" >> $redisServiceFile && printf "[Install]\n" >> $redisServiceFile && printf "WantedBy=multi-user.target\n" >> $redisServiceFile
-    adduser --system --group --no-create-home redis >> $OUTPUT_LOG 2>>$ERROR_LOG && mkdir /var/lib/redis && chown redis:redis /var/lib/redis && chmod 770 /var/lib/redis
-    systemctl enable redis >> $OUTPUT_LOG 2>>$ERROR_LOG
+    printf "[Unit]\n" >> $redisServiceFile && printf "Description=Redis In-Memory Data Store\n" >> $redisServiceFile && printf "After=network.target\n\n" >> $redisServiceFile && printf "[Service]\n" >> $redisServiceFile && printf "User=redis\n" >> $redisServiceFile && printf "Group=redis\n" >> $redisServiceFile && printf "ExecStop=/usr/local/bin/redis-cli shutdown\n" >> $redisServiceFile && printf "Restart=always\n\n" >> $redisServiceFile && printf "[Install]\n" >> $redisServiceFile && printf "WantedBy=multi-user.target\n" >> $redisServiceFile
+    adduser --system --group --no-create-home redis >> $OUTPUT_LOG 2>>$ERROR_LOG && chown redis:redis /var/lib/redis && chmod 770 /var/lib/redis
+    systemctl daemon-reload
+    systemctl enable redis-server >> $OUTPUT_LOG 2>>$ERROR_LOG
     service redis start
     cd ${redisInstallOldPath}
 }
@@ -912,264 +892,6 @@ function debian_clamav ()
 }
 
 
-#################################################################################
-#                                REDHAT FUNCTIONS                               #
-#################################################################################
-REDHAT_EPEL_INSTALLED=false
-function redhat_epel ()
-{
-    if [[ $REDHAT_EPEL_INSTALLED == true ]]; then
-        return
-    fi
-    output "setting up EPEL repository...." true
-    yum -y install epel-release >> $OUTPUT_LOG 2>>$ERROR_LOG &
-    print_spinner true
-    REDHAT_EPEL_INSTALLED=true
-}
-
-
-function redhat_redis ()
-{
-    output "installing redis"
-    redhat_epel
-    yum -y install redis >> $OUTPUT_LOG 2>>$ERROR_LOG
-    service redis start >> $OUTPUT_LOG 2>>$ERROR_LOG
-}
-
-
-function redhat_mongo ()
-{
-    redhat_epel
-
-    mkdir -p /data/db
-
-    output "installing mongodb....." true
-    yum -y install mongodb-server >> $OUTPUT_LOG 2>>$ERROR_LOG &
-    print_spinner true
-
-    output "setting semanage on mongodb....." true
-    semanage port -a -t mongod_port_t -p tcp 27017 >> $OUTPUT_LOG 2>>$ERROR_LOG
-    output "done" true true
-
-    output "starting mongodb...." true
-    service mongod start >> $OUTPUT_LOG 2>>$ERROR_LOG &
-    print_spinner true
-}
-
-
-function redhat_clamav ()
-{
-    output "Installing ClamAV...." true
-    yum -y install clamav >> $OUTPUT_LOG 2>>$ERROR_LOG &
-    print_spinner true
-    CLAM_INSTALLED=true
-}
-
-
-function redhat_install ()
-{
-    output "installing base software...." true
-    yum -y install curl wget git python make automake gcc gcc-c++ kernel-devel xorg-x11-server-Xvfb git-core >> $OUTPUT_LOG 2>>$ERROR_LOG &
-    print_spinner true
-
-    if [[ ! `command -v pwmake` ]]; then
-        if [[ $OS_VERSION == Amazon ]]; then
-            yum -y install passwd >> $OUTPUT_LOG 2>>$ERROR_LOG
-        elif [[ ! `command -v pwgen ` ]]; then
-            if [[ $AUTOSETUPUSER == true ]]; then
-                yum -y install pwgen >> $OUTPUT_LOG 2>>$ERROR_LOG
-            fi
-        fi
-    fi
-
-    INSTALL_NODE=false
-    if [[ ! `command -v node` ]]; then
-        output_log "installing node"
-        INSTALL_NODE=true
-    elif [[ `node --version | cut -d'.' -f 1` != $NODE_VERSION_STRING ]]; then
-        output_log "updating node"
-        INSTALL_NODE=true
-    else
-        CUR_NODE_VERSION=`node --version | cut -d'.' -f 1`
-        output_log "current node version is found as ${CUR_NODE_VERSION}"
-    fi
-
-    if [[ $INSTALL_NODE == true ]]; then
-        output "setting up node repo...." true
-        curl --silent --location https://rpm.nodesource.com/setup_${NODE_VERSION} | bash - >> $OUTPUT_LOG 2>>$ERROR_LOG &
-        print_spinner true
-        output "installing node...." true
-        yum -y install node >> $OUTPUT_LOG 2>>$ERROR_LOG &
-        print_spinner true
-    else
-        output "Node.js already installed"
-    fi
-
-    INSTALLED_NODE_VERSION=`node --version`
-    if [[ $INSTALLED_NODE_VERSION == "" ]]; then
-        output "ERROR :: node doesn't seem to be installed - exiting"
-        exit 1
-    fi
-    output "node version - $INSTALLED_NODE_VERSION"
-
-    if [[ ! `command -v yarn` ]]; then
-        output "setting up yarn repo...." true
-        wget https://dl.yarnpkg.com/rpm/yarn.repo -O /etc/yum.repos.d/yarn.repo >> $OUTPUT_LOG 2>>$ERROR_LOG &
-        print_spinner true
-        output "installing yarn...." true
-        yum -y install yarn >> $OUTPUT_LOG 2>>$ERROR_LOG &
-        print_spinner true
-    else
-        output "yarn already installed"
-    fi
-}
-
-
-function redhat_nginx ()
-{
-    if [[ ! -d $1 ]]; then
-        output "No temp directory passed to centos_nginx(), should be impossible - exiting"
-        exit 0
-    fi
-
-    while true; do
-        output "The next part of the install process will install nginx and remove any default configs - press 'y' to continue or 'n' to abort (press 'enter' for the default of 'y')"
-        if [[ $BYPASSALL == true ]]; then
-            output "bypass defaulting to 'y'"
-            break
-        fi
-        read -r -s -n 1 n
-        output_log "user pressed '${n}'"
-        if [[ $n == "" ]]; then
-            n="y"
-        fi
-        if [[ $n == "y" ]]; then
-            break
-        elif [[ $n == "n" ]]; then
-            output "Can't continue - you'll need to do this step by hand"
-            sleep 5
-            return
-        fi
-    done
-
-    output "installing nginx...."
-    yum -y install nginx >> $OUTPUT_LOG 2>>$ERROR_LOG &
-    print_spinner true
-
-    # remove default config if it exists
-    if [[ -f /etc/nginx/conf.d/default.conf ]]; then
-        rm /etc/nginx/conf.d/default.conf
-    fi
-
-    if [[ $OS_SUBVER == "Fedora" ]]; then
-        output "Default fedora nginx config needs the server block in /etc/nginx/nginx.conf removing"
-        output "before learninglocker will work properly or it'll clash with the LL config" false false 5
-        output "Press any key to continue" false false 5
-        if [[ $BYPASSALL == false ]]; then
-            read n
-        fi
-    fi
-
-
-    if [[ ! -f ${1}/nginx.conf.example ]]; then
-        output "default learninglocker nginx config doesn't exist - can't continue. Press any key to continue"
-        if [[ $BYPASSALL == false ]]; then
-            read n
-        fi
-        return
-    fi
-
-
-    if [[ ! -d /etc/nginx/conf.d ]]; then
-        mkdir -p /etc/nginx/conf.d
-    fi
-    NGINX_CONFIG=/etc/nginx/conf.d/learninglocker.conf
-    XAPI_ENV=${PWD}/${XAPI_SUBDIR}/.env
-    BASE_ENV=${PWD}/${WEBAPP_SUBDIR}/.env
-    mv ${1}/nginx.conf.example $NGINX_CONFIG
-    # sub in variables from the .envs to the nginx config
-    setup_nginx_config $NGINX_CONFIG $BASE_ENV $XAPI_ENV $2
-    restorecon -v $NGINX_CONFIG
-
-
-    if [[ $OS_SUBVER == "CentOS" ]] || [[ $OS_SUBVER == "Fedora" ]]; then
-        output "I need to punch a hole in selinux to continue. This is running the command:"
-        output "setsebool -P httpd_can_network_connect 1" false false 5
-        output "press 'y' to continue or 'n' to exit" false false 5
-        while true; do
-            if [[ $BYPASSALL == true ]]; then
-                output "bypass defaulting to 'y'"
-                setsebool -P httpd_can_network_connect 1
-                break
-            fi
-            read n
-            if [[ $n == "n" ]]; then
-                echo "not doing this, you'll have to run it by hand"
-                sleep 5
-                break
-            elif [[ $n == "y" ]]; then
-                setsebool -P httpd_can_network_connect 1
-                break
-            fi
-        done
-    fi
-
-
-    service nginx restart
-
-    if [[ $OS_SUBVER == "CentOS" ]]; then
-        output "as you're on CentOS, this may be running with firewalld enabled - you'll either need to punch"
-        output "a hole in the firewall rules or disable firewalld (not recommended) to allow inbound access to" false false 5
-        output "learning locker. Press any key to continue" false false 5
-        if [[ $BYPASSALL == false ]]; then
-            read n
-        fi
-    fi
-}
-
-
-#################################################################################
-#                                CENTOS FUNCTIONS                               #
-#################################################################################
-
-
-#################################################################################
-#                                AMAZON FUNCTIONS                               #
-#################################################################################
-function amazon_mongo ()
-{
-    MONGO_REPO_FILE=/etc/yum.repos.d/mongodb-org-4.0.repo
-
-    output "setting up mongo repo in $MONGO_REPO_FILE"
-
-    echo "[mongodb-org-4.0]" > $MONGO_REPO_FILE
-    echo "name=MongoDB Repository" >> $MONGO_REPO_FILE
-    echo "baseurl=https://repo.mongodb.org/yum/amazon/2013.03/mongodb-org/4.0/x86_64/" >> $MONGO_REPO_FILE
-    echo "gpgcheck=1" >> $MONGO_REPO_FILE
-    echo "enabled=1" >> $MONGO_REPO_FILE
-    echo "gpgkey=https://www.mongodb.org/static/pgp/server-4.0.asc" >> $MONGO_REPO_FILE
-
-    output "installing mongodb...." true
-    yum -y install mongodb-org >> $OUTPUT_LOG 2>>$ERROR_LOG &
-    print_spinner true
-}
-
-
-#################################################################################
-#                                FEDORA FUNCTIONS                               #
-#################################################################################
-function fedora_redis ()
-{
-    output "installing redis"
-    yum install redis >> $OUTPUT_LOG 2>>$ERROR_LOG
-}
-
-
-function fedora_mongo ()
-{
-    output "installing mongodb"
-    yum -y install mongodb-server >> $OUTPUT_LOG 2>>$ERROR_LOG
-}
 
 
 #################################################################################
@@ -1202,7 +924,7 @@ GIT_USER=false
 GIT_PASS=false
 XAPI_BRANCH="master"
 MIN_REDIS_VERSION="2.8.11"
-MIN_MONGO_VERSION="3.0.0"
+MIN_MONGO_VERSION="4.0.0"
 BUILDDIR="${_TD}/learninglocker"
 MONGO_INSTALLED=false
 REDIS_INSTALLED=false
@@ -1286,6 +1008,9 @@ if [[ -f $OUTPUT_LOG ]]; then
     rm $OUTPUT_LOG
     touch $OUTPUT_LOG
 fi
+
+# check supported OS
+determine_os_version
 
 # call the create_swap_space function to create 4GB of swap space before disk size check
 create_swap_space
@@ -1780,7 +1505,6 @@ fi
 #################################################################################
 #                          RUN BASE INSTALL TO TMPDIR                           #
 #################################################################################
-determine_os_version
 
 if [[ $NODE_OVERRIDE != false ]]; then
     NODE_VERSION=$NODE_OVERRIDE
@@ -1792,8 +1516,6 @@ if [[ $OS_VERSION == "Debian" ]]; then
     debian_install
 elif [[ $OS_VERSION == "Ubuntu" ]]; then
     debian_install
-elif [[ $OS_VERSION == "Redhat" ]]; then
-    redhat_install
 fi
 
 
@@ -1937,59 +1659,6 @@ if [[ $LOCAL_INSTALL == true ]] && [[ $UPDATE_MODE == false ]]; then
         if [[ $CLAM_INSTALL == true ]]; then
             debian_clamav
         fi
-    elif [[ $OS_VERSION == "Redhat" ]]; then
-        # BASE REDHAT stuff
-        redhat_nginx ${TMPDIR}/${WEBAPP_SUBDIR} $SYMLINK_PATH/${WEBAPP_SUBDIR}
-        if [[ $CLAM_INSTALL == true ]]; then
-            redhat_clamav
-        fi
-    # FEDORA
-        if [[ $OS_SUBVER == "Fedora" ]]; then
-            if [[ $REDIS_INSTALL == true ]]; then
-                fedora_redis
-            fi
-            if [[ $MONGO_INSTALL == true ]]; then
-                fedora_mongo
-            fi
-    # AMAZON
-        elif [[ $OS_SUBVER == "Amazon" ]]; then
-            if [[ $REDIS_INSTALL == true ]]; then
-                output "AWS Linux doesn't ship with Redis in a repository. You'll need to install this yourself. Press any key to continue"
-                REDIS_INSTALL=false
-                REDIS_INSTALLED=false
-                read -n 1 n
-                if [[ $MONGO_INSTALL == true ]]; then
-                    while true; do
-                        if [[ $BYPASSALL == true ]]; then
-                            output "BYPASS - installing mongo even without redis present"
-                            break
-                        fi
-                        output "As redis isn't going to be installed locally, do you still want to install MongoDB? [y|n] (press enter for the default of 'y')"
-                        read -s -r -n 1 n
-                        output_log "user entered '${n}'"
-                        if [[ $n == "n" ]]; then
-                            MONGO_INSTALL=false
-                            break
-                        elif [[ $n == "y" ]]; then
-                            MONGO_INSTALL=true
-                            break
-                        fi
-                    done
-                fi
-            fi
-            if [[ $MONGO_INSTALL == true ]]; then
-                amazon_mongo
-                read n
-            fi
-        else
-    # RHEL / GENERIC REDHAT & CENTOS (nothing specific required for centos)
-            if [[ $REDIS_INSTALL == true ]]; then
-                redhat_redis
-            fi
-            if [[ $MONGO_INSTALL == true ]]; then
-                redhat_mongo
-            fi
-        fi
     fi
 
     # get the clamAV path if needed
@@ -2031,14 +1700,6 @@ if [[ $LOCAL_INSTALL == true ]] && [[ $UPDATE_MODE == false ]]; then
         output "     change the variables in ${LOCAL_PATH}/.env to point to a redis server. The variables you'll need to" false true
         output "     change are 'REDIS_HOST', 'REDIS_PORT', 'REDIS_DB' and possibly 'REDIS_PREFIX'" false true
         echo
-        if [[ $OS_SUBVER == "Amazon" ]]; then
-            output "As you're running on AWS then you can use 'ElastiCache' to get a Redis instance set up quickly. We can't install"
-            output "     Redis on AWS EC2 instances at the moment as there are no official repositories for a copy of Redis. If you want" false true
-            output "     to install Redis on this server then we'd recommend you grab the latest version from:" false true
-            output "         https://redis.io/download" false true
-            output "     and follow the install steps on this page" false true
-            echo
-        fi
         if [[ $BYPASSALL == false ]]; then
             output "Press any key to continue" false true
             read -n 1 n
@@ -2494,7 +2155,7 @@ if [[ $SETUP_AMI == true ]]; then
         rm -R /tmp/deploy
     fi
     # git clone
-    git clone https://github.com/Uwe-Kohnle/deploy deploy
+    git clone https://github.com/internetlehrer/deploy deploy
 fi
 
 
